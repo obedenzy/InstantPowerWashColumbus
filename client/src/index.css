@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply font-sans bg-brand-white text-brand-navy-blue; /* Default background and text color */
+}
+
+/* Helper class for the small orange tags above section titles */
+.section-tag {
+  @apply inline-block bg-orange-100 text-brand-orange text-xs font-semibold px-3 py-1 rounded-full mb-2;
+}

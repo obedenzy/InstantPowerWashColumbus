@@ -1,0 +1,121 @@
+/*
+  # Create services table and populate pricing rules
+
+  This migration creates the `services` table to store details about each
+  painting service offered, including its pricing structure. It also populates
+  the table with the initial pricing rules provided.
+
+  1. New Tables
+     - `services`
+       - `id` (uuid, primary key, default gen_random_uuid()) - Unique identifier for the service.
+       - `title` (text, not null, unique) - The display name of the service (e.g., "Mailbox Painting").
+       - `description` (text) - A brief description of the service.
+       - `unit_label` (text, not null) - The label for the quantity input (e.g., "Number of rooms", "Linear feet").
+       - `unit_name` (text, not null) - The unit of measurement for calculation (e.g., 'room', 'linear_foot', 'sq_ft', 'unit', 'mailbox_standard', 'mailbox_large').
+       - `base_price` (numeric(10, 2), default 0.00) - The base price per unit or fixed price.
+       - `additional_price_per_unit` (numeric(10, 2), default 0.00) - Additional cost per unit (e.g., for prep, staining).
+       - `additional_cost_trigger` (text) - Keyword or condition triggering the additional cost (e.g., 'prep', 'staining', 'extra_wall'). Can be null.
+       - `fixed_price_threshold` (integer) - For services like mailboxes, the quantity threshold for applying a different fixed price (e.g., 1 for standard). Can be null.
+       - `fixed_price_above_threshold` (numeric(10, 2)) - The fixed price if quantity is above the threshold (e.g., large mailbox price). Can be null.
+       - `prep_cost` (numeric(10, 2), default 0.00) - Specific additional cost for prep work, if applicable outside the per-unit additional cost.
+       - `min_price` (numeric(10, 2)) - Minimum estimated price for display range.
+       - `max_price` (numeric(10, 2)) - Maximum estimated price for display range.
+       - `avg_price` (numeric(10, 2)) - Average estimated price for display range.
+       - `created_at` (timestamptz, default now())
+
+  2. Data Population
+     - Inserts the initial service details and pricing rules based on the provided information.
+
+  3. Security
+     - Enables Row Level Security (RLS) on the `services` table.
+     - Adds a policy `Allow public read access` for anyone to read service details (needed for the frontend form).
+     - Restricts INSERT, UPDATE, DELETE to `service_role` or `postgres` admin users.
+*/
+
+-- 1. Create Table
+CREATE TABLE IF NOT EXISTS public.services (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title text NOT NULL UNIQUE,
+  description text,
+  unit_label text NOT NULL,
+  unit_name text NOT NULL, -- e.g., 'room', 'linear_foot', 'sq_ft', 'unit', 'mailbox_standard', 'mailbox_large'
+  base_price numeric(10, 2) DEFAULT 0.00,
+  additional_price_per_unit numeric(10, 2) DEFAULT 0.00,
+  additional_cost_trigger text, -- e.g., 'prep', 'staining', 'extra_wall'
+  fixed_price_threshold integer, -- e.g., 1 for mailboxes
+  fixed_price_above_threshold numeric(10, 2), -- e.g., large mailbox price
+  prep_cost numeric(10, 2) DEFAULT 0.00, -- Specific prep cost if applicable
+  min_price numeric(10, 2),
+  max_price numeric(10, 2),
+  avg_price numeric(10, 2),
+  created_at timestamptz DEFAULT now()
+);
+
+COMMENT ON TABLE public.services IS 'Stores details and pricing rules for offered painting services.';
+COMMENT ON COLUMN public.services.unit_label IS 'Display label for the quantity input field.';
+COMMENT ON COLUMN public.services.unit_name IS 'Internal unit name for calculation logic.';
+COMMENT ON COLUMN public.services.base_price IS 'Base price per unit or fixed price for quantity <= threshold.';
+COMMENT ON COLUMN public.services.additional_price_per_unit IS 'Additional cost applied per unit based on trigger.';
+COMMENT ON COLUMN public.services.additional_cost_trigger IS 'Condition that triggers the additional_price_per_unit.';
+COMMENT ON COLUMN public.services.fixed_price_threshold IS 'Quantity threshold for applying fixed_price_above_threshold.';
+COMMENT ON COLUMN public.services.fixed_price_above_threshold IS 'Fixed price applied if quantity > fixed_price_threshold.';
+COMMENT ON COLUMN public.services.prep_cost IS 'Flat additional cost for preparation if applicable.';
+COMMENT ON COLUMN public.services.min_price IS 'Minimum estimated price for display range.';
+COMMENT ON COLUMN public.services.max_price IS 'Maximum estimated price for display range.';
+COMMENT ON COLUMN public.services.avg_price IS 'Average estimated price for display range.';
+
+
+-- 2. Data Population (Based on provided rules)
+-- Clear existing data to avoid duplicates if script is run multiple times
+-- DELETE FROM public.services;
+
+INSERT INTO public.services (title, description, unit_label, unit_name, base_price, additional_price_per_unit, additional_cost_trigger, prep_cost, min_price, max_price, avg_price)
+VALUES
+  ('Residential Touch-Up Painting', 'Perfect for single rooms or entire properties.', 'Number of rooms', 'room', 400.00, 100.00, 'extra_wall', 0.00, 400.00, 800.00, 600.00)
+ON CONFLICT (title) DO NOTHING; -- Avoid errors if service already exists
+
+INSERT INTO public.services (title, description, unit_label, unit_name, base_price, fixed_price_threshold, fixed_price_above_threshold, prep_cost, min_price, max_price, avg_price)
+VALUES
+  ('Mailbox Painting', 'Refresh your mailbox and enhance curb appeal.', 'Number of mailboxes', 'mailbox', 75.00, 1, 100.00, 25.00, 75.00, 125.00, 100.00)
+ON CONFLICT (title) DO NOTHING;
+
+INSERT INTO public.services (title, description, unit_label, unit_name, base_price, additional_price_per_unit, additional_cost_trigger, min_price, max_price, avg_price)
+VALUES
+  ('Fence Painting', 'Protect and beautify your fence.', 'Fence length (ft)', 'linear_foot', 2.50, 1.00, 'staining_prep', 0.00, 250.00, 500.00, 375.00) -- Assuming range is for 100ft
+ON CONFLICT (title) DO NOTHING;
+
+INSERT INTO public.services (title, description, unit_label, unit_name, base_price, additional_price_per_unit, additional_cost_trigger, min_price, max_price, avg_price)
+VALUES
+  ('Patio/Deck Painting', 'Revitalize your outdoor living space.', 'Area (sq ft)', 'sq_ft', 1.75, 0.75, 'staining_coating', 0.00, 350.00, 700.00, 500.00) -- Assuming range is for 200 sqft
+ON CONFLICT (title) DO NOTHING;
+
+INSERT INTO public.services (title, description, unit_label, unit_name, base_price, additional_price_per_unit, additional_cost_trigger, prep_cost, min_price, max_price, avg_price)
+VALUES
+  ('Small Exterior Trim Painting', 'Paint window frames, door frames, or soffits.', 'Number of windows/doors', 'unit', 30.00, 0.00, null, 15.00, 120.00, 250.00, 185.00) -- Prep cost is per unit here
+ON CONFLICT (title) DO NOTHING;
+
+
+-- 3. Security
+ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access
+DROP POLICY IF EXISTS "Allow public read access" ON public.services;
+CREATE POLICY "Allow public read access"
+  ON public.services
+  FOR SELECT
+  USING (true);
+
+-- Restrict modifications to admin/service roles
+DROP POLICY IF EXISTS "Allow admin modification" ON public.services;
+CREATE POLICY "Allow admin modification"
+  ON public.services
+  FOR ALL -- Covers INSERT, UPDATE, DELETE
+  USING (auth.role() = 'service_role' OR auth.role() = 'postgres')
+  WITH CHECK (auth.role() = 'service_role' OR auth.role() = 'postgres');
+
+-- Ensure default roles like 'authenticated' or 'anon' cannot modify
+DROP POLICY IF EXISTS "Deny modification for other roles" ON public.services;
+CREATE POLICY "Deny modification for other roles"
+  ON public.services
+  FOR ALL
+  USING (false); -- Effectively denies unless overridden by a specific permissive policy
